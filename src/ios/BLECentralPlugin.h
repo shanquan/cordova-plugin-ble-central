@@ -23,23 +23,31 @@
 #import <CoreBluetooth/CoreBluetooth.h>
 #import "BLECommandContext.h"
 #import "CBPeripheral+Extensions.h"
+#import <iOSDFULibrary/iOSDFULibrary-Swift.h>
 
-// https://github.com/guyromb/cordova-open-native-settings/blob/master/src/ios/NativeSettings.h
-#define SYSTEM_VERSION_LESS_THAN(v) ([[[UIDevice currentDevice] systemVersion] compare:v options:NSNumericSearch] == NSOrderedAscending)
 
-@interface BLECentralPlugin : CDVPlugin <CBCentralManagerDelegate, CBPeripheralDelegate> {
-    NSString* discoverPeripheralCallbackId;
+@interface BLECentralPlugin : CDVPlugin <CBCentralManagerDelegate, CBPeripheralDelegate,LoggerDelegate,DFUServiceDelegate,DFUProgressDelegate> {
+    NSString* discoverPeripherialCallbackId;
     NSString* stateCallbackId;
+    
+    NSString* startDFUCallbackId;
+    NSString* dfuProgressCallbackId;
+    NSString* dfuStateCallbackId;
+
+    
+    
     NSMutableDictionary* connectCallbacks;
     NSMutableDictionary *readCallbacks;
     NSMutableDictionary *writeCallbacks;
     NSMutableDictionary *notificationCallbacks;
-    NSMutableDictionary *startNotificationCallbacks;
     NSMutableDictionary *stopNotificationCallbacks;
     NSMutableDictionary *connectCallbackLatches;
     NSMutableDictionary *readRSSICallbacks;
 }
 
+@property (strong, nonatomic) DFUServiceController *controller;
+@property (strong, nonatomic) DFUFirmware *selectedFirmware;
+@property (strong, nonatomic)  DFUServiceInitiator *initiator;
 @property (strong, nonatomic) NSMutableSet *peripherals;
 @property (strong, nonatomic) CBCentralManager *manager;
 
@@ -49,6 +57,7 @@
 - (void)stopScan:(CDVInvokedUrlCommand *)command;
 
 - (void)connect:(CDVInvokedUrlCommand *)command;
+
 - (void)disconnect:(CDVInvokedUrlCommand *)command;
 
 - (void)read:(CDVInvokedUrlCommand *)command;
@@ -63,12 +72,17 @@
 
 - (void)startStateNotifications:(CDVInvokedUrlCommand *)command;
 - (void)stopStateNotifications:(CDVInvokedUrlCommand *)command;
-
-- (void)showBluetoothSettings:(CDVInvokedUrlCommand *)command;
-
 - (void)onReset;
-
 - (void)readRSSI:(CDVInvokedUrlCommand *)command;
+/************升级****************/
+
+
+
+- (void)startDFU:(CDVInvokedUrlCommand *)command;
+
+- (void)watchProgressChanged:(CDVInvokedUrlCommand *)command;
+
+- (void)watchStateChanged:(CDVInvokedUrlCommand *)command;
 
 @end
 

@@ -19,14 +19,7 @@
 #import "CBPeripheral+Extensions.h"
 
 static char ADVERTISING_IDENTIFER;
-static char SAVED_RSSI_IDENTIFER;
-
-static NSDictionary *dataToArrayBuffer(NSData* data) {
-    return @{
-             @"CDVType" : @"ArrayBuffer",
-             @"data" :[data base64EncodedStringWithOptions:0]
-             };
-}
+static char ADVERTISEMENT_RSSI_IDENTIFER;
 
 @implementation CBPeripheral(com_megster_ble_extension)
 
@@ -46,33 +39,38 @@ static NSDictionary *dataToArrayBuffer(NSData* data) {
     } else {
         uuidString = @"";
     }
-
+    
     NSMutableDictionary *dictionary = [NSMutableDictionary dictionary];
     [dictionary setObject: uuidString forKey: @"id"];
-
+    
     if ([self name]) {
         [dictionary setObject: [self name] forKey: @"name"];
     }
-
-    if ([self savedRSSI]) {
-        [dictionary setObject: [self savedRSSI] forKey: @"rssi"];
+    
+    if ([self RSSI]) {
+        [dictionary setObject: [self RSSI] forKey: @"rssi"];
+    } else if ([self advertisementRSSI]) {
+        [dictionary setObject: [self advertisementRSSI] forKey: @"rssi"];
     }
-
+    
     if ([self advertising]) {
         [dictionary setObject: [self advertising] forKey: @"advertising"];
     }
-
+    
     if([[self services] count] > 0) {
         [self serviceAndCharacteristicInfo: dictionary];
     }
-
+    
     return dictionary;
+    
 }
 
 // AdvertisementData is from didDiscoverPeripheral. RFduino advertises a service name in the Mfg Data Field.
--(void)setAdvertisementData:(NSDictionary *)advertisementData RSSI:(NSNumber *)rssi {
+-(void)setAdvertisementData:(NSDictionary *)advertisementData RSSI:(NSNumber *)rssi{
+    
     [self setAdvertising:[self serializableAdvertisementData: advertisementData]];
-    [self setSavedRSSI: rssi];
+    [self setAdvertisementRSSI: rssi];
+    
 }
 
 // Translates the Advertisement Data from didDiscoverPeripheral into a structure that can be serialized as JSON
@@ -101,67 +99,78 @@ static NSDictionary *dataToArrayBuffer(NSData* data) {
 //     kCBAdvDataTxPowerLevel = 32;
 //};
 - (NSDictionary *) serializableAdvertisementData: (NSDictionary *) advertisementData {
+    
+    NSLog(@"advertisementData:%@",advertisementData);
+    
+    NSData *data = [advertisementData objectForKey:CBAdvertisementDataManufacturerDataKey];
+    NSString *newStr = [self convertDataToHexStr:data];
+    //NSString * neswStr = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    
     NSMutableDictionary *dict = [advertisementData mutableCopy];
-
+    
     // Service Data is a dictionary of CBUUID and NSData
     // Convert to String keys with Array Buffer values
     NSMutableDictionary *serviceData = [dict objectForKey:CBAdvertisementDataServiceDataKey];
     if (serviceData) {
         NSLog(@"%@", serviceData);
-
+        
         for (CBUUID *key in [serviceData allKeys]) {
-            [serviceData setObject:dataToArrayBuffer([serviceData objectForKey:key]) forKey:[key UUIDString]];
+            //[serviceData setObject:dataToArrayBuffer([serviceData objectForKey:key]) forKey:[key UUIDString]];
+            [serviceData setValue:[self convertDataToHexStr:[serviceData objectForKey:key]] forKey:[key UUIDString]];
             [serviceData removeObjectForKey:key];
         }
     }
-
+    
     // Create a new list of Service UUIDs as Strings instead of CBUUIDs
     NSMutableArray *serviceUUIDs = [dict objectForKey:CBAdvertisementDataServiceUUIDsKey];
     NSMutableArray *serviceUUIDStrings;
     if (serviceUUIDs) {
         serviceUUIDStrings = [[NSMutableArray alloc] initWithCapacity:serviceUUIDs.count];
-
+        
         for (CBUUID *uuid in serviceUUIDs) {
             [serviceUUIDStrings addObject:[uuid UUIDString]];
         }
-
+        
         // replace the UUID list with list of strings
         [dict removeObjectForKey:CBAdvertisementDataServiceUUIDsKey];
         [dict setObject:serviceUUIDStrings forKey:CBAdvertisementDataServiceUUIDsKey];
-
+        
     }
-
+    
     // Solicited Services UUIDs is an array of CBUUIDs, convert into Strings
     NSMutableArray *solicitiedServiceUUIDs = [dict objectForKey:CBAdvertisementDataSolicitedServiceUUIDsKey];
     NSMutableArray *solicitiedServiceUUIDStrings;
     if (solicitiedServiceUUIDs) {
         // NSLog(@"%@", solicitiedServiceUUIDs);
         solicitiedServiceUUIDStrings = [[NSMutableArray alloc] initWithCapacity:solicitiedServiceUUIDs.count];
-
+        
         for (CBUUID *uuid in solicitiedServiceUUIDs) {
             [solicitiedServiceUUIDStrings addObject:[uuid UUIDString]];
         }
-
+        
         // replace the UUID list with list of strings
         [dict removeObjectForKey:CBAdvertisementDataSolicitedServiceUUIDsKey];
         [dict setObject:solicitiedServiceUUIDStrings forKey:CBAdvertisementDataSolicitedServiceUUIDsKey];
     }
-
+    
     // Convert the manufacturer data
     NSData *mfgData = [dict objectForKey:CBAdvertisementDataManufacturerDataKey];
+    
     if (mfgData) {
-        [dict setObject:dataToArrayBuffer([dict objectForKey:CBAdvertisementDataManufacturerDataKey]) forKey:CBAdvertisementDataManufacturerDataKey];
+        //[dict setObject:dataToArrayBuffer([dict objectForKey:CBAdvertisementDataManufacturerDataKey]) forKey:CBAdvertisementDataManufacturerDataKey];
+        [dict setValue:newStr forKey:CBAdvertisementDataManufacturerDataKey];
     }
-
+    
     return dict;
 }
 
 // Put the service, characteristic, and descriptor data in a format that will serialize through JSON
 // sending a list of services and a list of characteristics
 - (void) serviceAndCharacteristicInfo: (NSMutableDictionary *) info {
+    
     NSMutableArray *serviceList = [NSMutableArray new];
     NSMutableArray *characteristicList = [NSMutableArray new];
-
+    
     // This can move into the CBPeripherial Extension
     for (CBService *service in [self services]) {
         [serviceList addObject:[[service UUID] UUIDString]];
@@ -169,7 +178,7 @@ static NSDictionary *dataToArrayBuffer(NSData* data) {
             NSMutableDictionary *characteristicDictionary = [NSMutableDictionary new];
             [characteristicDictionary setObject:[[service UUID] UUIDString] forKey:@"service"];
             [characteristicDictionary setObject:[[characteristic UUID] UUIDString] forKey:@"characteristic"];
-
+            
             if ([characteristic value]) {
                 [characteristicDictionary setObject:dataToArrayBuffer([characteristic value]) forKey:@"value"];
             }
@@ -180,7 +189,7 @@ static NSDictionary *dataToArrayBuffer(NSData* data) {
             // permissions only exist on CBMutableCharacteristics
             [characteristicDictionary setObject:[NSNumber numberWithBool:[characteristic isNotifying]] forKey:@"isNotifying"];
             [characteristicList addObject:characteristicDictionary];
-
+            
             // descriptors always seem to be nil, probably a bug here
             NSMutableArray *descriptorList = [NSMutableArray new];
             for (CBDescriptor *descriptor in characteristic.descriptors) {
@@ -194,61 +203,92 @@ static NSDictionary *dataToArrayBuffer(NSData* data) {
             if ([descriptorList count] > 0) {
                 [characteristicDictionary setObject:descriptorList forKey:@"descriptors"];
             }
-
+            
         }
     }
-
+    
     [info setObject:serviceList forKey:@"services"];
     [info setObject:characteristicList forKey:@"characteristics"];
+    
 }
 
 -(NSArray *) decodeCharacteristicProperties: (CBCharacteristic *) characteristic {
     NSMutableArray *props = [NSMutableArray new];
-
+    
     CBCharacteristicProperties p = [characteristic properties];
-
+    
     // NOTE: props strings need to be consistent across iOS and Android
     if ((p & CBCharacteristicPropertyBroadcast) != 0x0) {
         [props addObject:@"Broadcast"];
     }
-
+    
     if ((p & CBCharacteristicPropertyRead) != 0x0) {
         [props addObject:@"Read"];
     }
-
+    
     if ((p & CBCharacteristicPropertyWriteWithoutResponse) != 0x0) {
         [props addObject:@"WriteWithoutResponse"];
     }
-
+    
     if ((p & CBCharacteristicPropertyWrite) != 0x0) {
         [props addObject:@"Write"];
     }
-
+    
     if ((p & CBCharacteristicPropertyNotify) != 0x0) {
         [props addObject:@"Notify"];
     }
-
+    
     if ((p & CBCharacteristicPropertyIndicate) != 0x0) {
         [props addObject:@"Indicate"];
     }
-
+    
     if ((p & CBCharacteristicPropertyAuthenticatedSignedWrites) != 0x0) {
         [props addObject:@"AutheticateSignedWrites"];
     }
-
+    
     if ((p & CBCharacteristicPropertyExtendedProperties) != 0x0) {
         [props addObject:@"ExtendedProperties"];
     }
-
+    
     if ((p & CBCharacteristicPropertyNotifyEncryptionRequired) != 0x0) {
         [props addObject:@"NotifyEncryptionRequired"];
     }
-
+    
     if ((p & CBCharacteristicPropertyIndicateEncryptionRequired) != 0x0) {
         [props addObject:@"IndicateEncryptionRequired"];
     }
-
+    
     return props;
+}
+
+// Borrowed from Cordova messageFromArrayBuffer since Cordova doesn't handle NSData in NSDictionary
+id dataToArrayBuffer(NSData* data)
+{
+    return @{
+             @"CDVType" : @"ArrayBuffer",
+             @"data" :[data base64EncodedStringWithOptions:0]
+             };
+}
+
+- (NSString *)convertDataToHexStr:(NSData *)data {
+    if (!data || [data length] == 0) {
+        return @"";
+    }
+    NSMutableString *string = [[NSMutableString alloc] initWithCapacity:[data length]];
+    
+    [data enumerateByteRangesUsingBlock:^(const void *bytes, NSRange byteRange, BOOL *stop) {
+        unsigned char *dataBytes = (unsigned char*)bytes;
+        for (NSInteger i = 0; i < byteRange.length; i++) {
+            NSString *hexStr = [NSString stringWithFormat:@"%x", (dataBytes[i]) & 0xff];
+            if ([hexStr length] == 2) {
+                [string appendString:hexStr];
+            } else {
+                [string appendFormat:@"0%@", hexStr];
+            }
+        }
+    }];
+    
+    return string;
 }
 
 -(void)setAdvertising:(NSDictionary *)newAdvertisingValue{
@@ -260,12 +300,12 @@ static NSDictionary *dataToArrayBuffer(NSData* data) {
 }
 
 
--(void)setSavedRSSI:(NSNumber *)newSavedRSSIValue {
-    objc_setAssociatedObject(self, &SAVED_RSSI_IDENTIFER, newSavedRSSIValue, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+-(void)setAdvertisementRSSI:(NSNumber *)newAdvertisementRSSIValue {
+    objc_setAssociatedObject(self, &ADVERTISEMENT_RSSI_IDENTIFER, newAdvertisementRSSIValue, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
--(NSString*)savedRSSI{
-    return objc_getAssociatedObject(self, &SAVED_RSSI_IDENTIFER);
+-(NSString*)advertisementRSSI{
+    return objc_getAssociatedObject(self, &ADVERTISEMENT_RSSI_IDENTIFER);
 }
 
 @end

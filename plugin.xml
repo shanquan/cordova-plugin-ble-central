@@ -38,6 +38,8 @@
 
         <!-- frameworks -->
         <framework src="CoreBluetooth.framework" />
+        <framework src="iOSDFULibrary" type="podspec" spec="~> 4.1.3"/>
+        <hook type="before_plugin_install" src="hooks/ios_pod_extra_settings.js" />
 
         <preference name="BLUETOOTH_USAGE_DESCRIPTION" default=" " />
         <config-file target="*-Info.plist" parent="NSBluetoothPeripheralUsageDescription">

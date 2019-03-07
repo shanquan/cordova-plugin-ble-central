@@ -5,11 +5,11 @@
 需要设备在"kCBAdvDataManufacturerData"字段写入MAC地址信息，广播返回数据示例：
 ```json
 {
-    name: "band",
-    id: "BD922605-1B07-4D55-8D09-B66653E51BBA", 
-    rssi: -79,
-    advertising: {
-      kCBAdvDataManufacturerData: "ffffdf011ab5b9a7"
+    "name": "band",
+    "id": "BD922605-1B07-4D55-8D09-B66653E51BBA", 
+    "rssi": -79,
+    "advertising": {
+      "kCBAdvDataManufacturerData": "ffffdf011ab5b9a7"
     }
 }
 ```
